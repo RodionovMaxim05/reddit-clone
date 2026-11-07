@@ -18,6 +18,8 @@ type PostRepository interface {
 	Create(post *domain.Post) error
 	AddComment(postID string, comment *domain.Comment) (*domain.Post, error)
 	DeleteComment(postID, commentID string, user *domain.User) (*domain.Post, error)
+	Vote(postID string, userID string, value int) (*domain.Post, error)
+	Unvote(postID string, userID string) (*domain.Post, error)
 }
 
 type MemoryPostRepository struct {
@@ -151,6 +153,93 @@ func (r *MemoryPostRepository) DeleteComment(postID, commentID string, user *dom
 	// Removing an element from a slice
 	targetPost.Comments = append(targetPost.Comments[:commentIdx], targetPost.Comments[commentIdx+1:]...)
 	return targetPost, nil
+}
+
+func (r *MemoryPostRepository) Vote(postID string, userID string, value int) (*domain.Post, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	var targetPost *domain.Post
+	for _, p := range r.posts {
+		if p.ID == postID {
+			targetPost = p
+			break
+		}
+	}
+	if targetPost == nil {
+		return nil, domain.ErrPostNotFound
+	}
+
+	// Searching for an existing voice for the current user
+	found := false
+	for i, v := range targetPost.Votes {
+		if v.UserID == userID {
+			targetPost.Votes[i].Value = value
+			found = true
+			break
+		}
+	}
+
+	if !found {
+		targetPost.Votes = append(targetPost.Votes, domain.Vote{
+			UserID: userID,
+			Value:  value,
+		})
+	}
+
+	recalculatePostStats(targetPost)
+	return targetPost, nil
+}
+
+func (r *MemoryPostRepository) Unvote(postID string, userID string) (*domain.Post, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	var targetPost *domain.Post
+	for _, p := range r.posts {
+		if p.ID == postID {
+			targetPost = p
+			break
+		}
+	}
+	if targetPost == nil {
+		return nil, domain.ErrPostNotFound
+	}
+
+	voteIdx := -1
+	for i, v := range targetPost.Votes {
+		if v.UserID == userID {
+			voteIdx = i
+			break
+		}
+	}
+
+	if voteIdx != -1 {
+		targetPost.Votes = append(targetPost.Votes[:voteIdx], targetPost.Votes[voteIdx+1:]...)
+	}
+
+	recalculatePostStats(targetPost)
+	return targetPost, nil
+}
+
+func recalculatePostStats(p *domain.Post) {
+	score := 0
+	upvotes := 0
+	total := len(p.Votes)
+
+	for _, v := range p.Votes {
+		score += v.Value
+		if v.Value == 1 {
+			upvotes++
+		}
+	}
+
+	p.Score = score
+	if total == 0 {
+		p.UpvotePercentage = 0
+	} else {
+		p.UpvotePercentage = (upvotes * 100) / total
+	}
 }
 
 func (r *MemoryPostRepository) seedData() {

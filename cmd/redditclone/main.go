@@ -73,6 +73,11 @@ func newMux(staticDir string, postHandler *controller.PostHandler, userHandler *
 	mux.HandleFunc("POST /api/post/{postId}", protected(postHandler.CreateComment))
 	mux.HandleFunc("DELETE /api/post/{postId}/{commentId}", protected(postHandler.DeleteComment))
 
+	// Protected routes for voting (GET changes state for the sake of frontend compatibility)
+	mux.HandleFunc("GET /api/post/{postId}/upvote", protected(postHandler.UpvotePost))
+	mux.HandleFunc("GET /api/post/{postId}/downvote", protected(postHandler.DownvotePost))
+	mux.HandleFunc("GET /api/post/{postId}/unvote", protected(postHandler.UnvotePost))
+
 	mux.Handle("/api", http.NotFoundHandler())
 	mux.Handle("/api/", http.NotFoundHandler())
 
