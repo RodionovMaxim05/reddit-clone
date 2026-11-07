@@ -16,6 +16,7 @@ type PostRepository interface {
 	GetByID(id string) (*domain.Post, error)
 	GetByCategory(category string) ([]*domain.Post, error)
 	Create(post *domain.Post) error
+	Delete(id string, user *domain.User) error
 	AddComment(postID string, comment *domain.Comment) (*domain.Post, error)
 	DeleteComment(postID, commentID string, user *domain.User) (*domain.Post, error)
 	Vote(postID string, userID string, value int) (*domain.Post, error)
@@ -90,6 +91,34 @@ func (r *MemoryPostRepository) Create(p *domain.Post) error {
 	p.ID = fmt.Sprintf("post_%d", idNum)
 
 	r.posts = append(r.posts, p)
+	return nil
+}
+
+func (r *MemoryPostRepository) Delete(id string, user *domain.User) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	idx := -1
+	var targetPost *domain.Post
+	for i, p := range r.posts {
+		if p.ID == id {
+			idx = i
+			targetPost = p
+			break
+		}
+	}
+
+	if idx == -1 {
+		return domain.ErrPostNotFound
+	}
+
+	// Only the author or an administrator can delete a post
+	if targetPost.Author.ID != user.ID && !user.Admin {
+		return domain.ErrUnauthorized
+	}
+
+	// Removing a post from the slice
+	r.posts = append(r.posts[:idx], r.posts[idx+1:]...)
 	return nil
 }
 

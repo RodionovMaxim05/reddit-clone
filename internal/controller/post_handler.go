@@ -104,6 +104,31 @@ func (h *PostHandler) CreatePost(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusCreated, response)
 }
 
+func (h *PostHandler) DeletePost(w http.ResponseWriter, r *http.Request) {
+	user, ok := UserFromContext(r.Context())
+	if !ok {
+		writeJSON(w, http.StatusUnauthorized, dto.ErrorResponse{Message: "unauthorized"})
+		return
+	}
+
+	postID := r.PathValue("postId")
+
+	err := h.repo.Delete(postID, user)
+	if err != nil {
+		switch {
+		case errors.Is(err, domain.ErrPostNotFound):
+			writeJSON(w, http.StatusNotFound, dto.ErrorResponse{Message: "post not found"})
+		case errors.Is(err, domain.ErrUnauthorized):
+			writeJSON(w, http.StatusUnauthorized, dto.ErrorResponse{Message: "unauthorized"})
+		default:
+			writeJSON(w, http.StatusInternalServerError, dto.ErrorResponse{Message: "internal server error"})
+		}
+		return
+	}
+
+	writeJSON(w, http.StatusOK, dto.SuccessResponse{Message: "success"})
+}
+
 func (h *PostHandler) ListPosts(w http.ResponseWriter, r *http.Request) {
 	posts, err := h.repo.GetAll()
 	if err != nil {
