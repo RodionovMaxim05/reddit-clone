@@ -222,3 +222,73 @@ func (h *PostHandler) DeleteComment(w http.ResponseWriter, r *http.Request) {
 	response := dto.NewPostResponse(updatedPost)
 	writeJSON(w, http.StatusOK, response)
 }
+
+func (h *PostHandler) UpvotePost(w http.ResponseWriter, r *http.Request) {
+	user, ok := UserFromContext(r.Context())
+	if !ok {
+		writeJSON(w, http.StatusUnauthorized, dto.ErrorResponse{Message: "unauthorized"})
+		return
+	}
+
+	postID := r.PathValue("postId")
+
+	updatedPost, err := h.repo.Vote(postID, user.ID, 1)
+	if err != nil {
+		if errors.Is(err, domain.ErrPostNotFound) {
+			writeJSON(w, http.StatusNotFound, dto.ErrorResponse{Message: "post not found"})
+
+			return
+		}
+		writeJSON(w, http.StatusInternalServerError, dto.ErrorResponse{Message: "internal server error"})
+		return
+	}
+
+	response := dto.NewPostResponse(updatedPost)
+	writeJSON(w, http.StatusOK, response)
+}
+
+func (h *PostHandler) DownvotePost(w http.ResponseWriter, r *http.Request) {
+	user, ok := UserFromContext(r.Context())
+	if !ok {
+		writeJSON(w, http.StatusUnauthorized, dto.ErrorResponse{Message: "unauthorized"})
+		return
+	}
+
+	postID := r.PathValue("postId")
+
+	updatedPost, err := h.repo.Vote(postID, user.ID, -1)
+	if err != nil {
+		if errors.Is(err, domain.ErrPostNotFound) {
+			writeJSON(w, http.StatusNotFound, dto.ErrorResponse{Message: "post not found"})
+			return
+		}
+		writeJSON(w, http.StatusInternalServerError, dto.ErrorResponse{Message: "internal server error"})
+		return
+	}
+
+	response := dto.NewPostResponse(updatedPost)
+	writeJSON(w, http.StatusOK, response)
+}
+
+func (h *PostHandler) UnvotePost(w http.ResponseWriter, r *http.Request) {
+	user, ok := UserFromContext(r.Context())
+	if !ok {
+		writeJSON(w, http.StatusUnauthorized, dto.ErrorResponse{Message: "unauthorized"})
+		return
+	}
+
+	postID := r.PathValue("postId")
+
+	updatedPost, err := h.repo.Unvote(postID, user.ID)
+	if err != nil {
+		if errors.Is(err, domain.ErrPostNotFound) {
+			writeJSON(w, http.StatusNotFound, dto.ErrorResponse{Message: "post not found"})
+			return
+		}
+		writeJSON(w, http.StatusInternalServerError, dto.ErrorResponse{Message: "internal server error"})
+		return
+	}
+
+	response := dto.NewPostResponse(updatedPost)
+	writeJSON(w, http.StatusOK, response)
+}
