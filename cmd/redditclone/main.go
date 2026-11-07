@@ -64,10 +64,11 @@ func newMux(staticDir string, postHandler *controller.PostHandler, userHandler *
 	mux.HandleFunc("GET /api/post/{postId}", postHandler.GetPost)
 	mux.HandleFunc("GET /api/posts/{category}", postHandler.ListPostsByCategory)
 
-	// Protected routes for post creation
+	// Protected routes for post creation/deletion
 	protected := controller.AuthMiddleware(tokenManager)
 	mux.HandleFunc("POST /api/posts", protected(postHandler.CreatePost))
 	mux.HandleFunc("POST /api/posts/{$}", protected(postHandler.CreatePost))
+	mux.HandleFunc("DELETE /api/post/{postId}", protected(postHandler.DeletePost))
 
 	// Protected routes for comment creation
 	mux.HandleFunc("POST /api/post/{postId}", protected(postHandler.CreateComment))
