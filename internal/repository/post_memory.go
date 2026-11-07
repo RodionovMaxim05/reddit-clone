@@ -16,12 +16,15 @@ type PostRepository interface {
 	GetByID(id string) (*domain.Post, error)
 	GetByCategory(category string) ([]*domain.Post, error)
 	Create(post *domain.Post) error
+	AddComment(postID string, comment *domain.Comment) (*domain.Post, error)
+	DeleteComment(postID, commentID string, user *domain.User) (*domain.Post, error)
 }
 
 type MemoryPostRepository struct {
-	mu    sync.RWMutex
-	posts []*domain.Post
-	seq   uint64
+	mu         sync.RWMutex
+	posts      []*domain.Post
+	seq        uint64
+	commentSeq uint64
 }
 
 func NewMemoryPostRepository() *MemoryPostRepository {
@@ -86,6 +89,68 @@ func (r *MemoryPostRepository) Create(p *domain.Post) error {
 
 	r.posts = append(r.posts, p)
 	return nil
+}
+
+func (r *MemoryPostRepository) AddComment(postID string, comment *domain.Comment) (*domain.Post, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	var targetPost *domain.Post
+	for _, p := range r.posts {
+		if p.ID == postID {
+			targetPost = p
+			break
+		}
+	}
+
+	if targetPost == nil {
+		return nil, domain.ErrPostNotFound
+	}
+
+	idNum := atomic.AddUint64(&r.commentSeq, 1) + 500
+	comment.ID = fmt.Sprintf("comment_%d", idNum)
+	comment.CreatedAt = time.Now().UTC()
+
+	targetPost.Comments = append(targetPost.Comments, *comment)
+	return targetPost, nil
+}
+
+func (r *MemoryPostRepository) DeleteComment(postID, commentID string, user *domain.User) (*domain.Post, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	var targetPost *domain.Post
+	for _, p := range r.posts {
+		if p.ID == postID {
+			targetPost = p
+			break
+		}
+	}
+	if targetPost == nil {
+		return nil, domain.ErrPostNotFound
+	}
+
+	commentIdx := -1
+	for i, c := range targetPost.Comments {
+		if c.ID == commentID {
+			commentIdx = i
+			break
+		}
+	}
+	if commentIdx == -1 {
+		return nil, domain.ErrCommentNotFound
+	}
+
+	targetComment := targetPost.Comments[commentIdx]
+
+	// A comment can only be deleted by its author, the author of the post, or an administrators
+	if user.ID != targetComment.Author.ID && user.ID != targetPost.Author.ID && !user.Admin {
+		return nil, domain.ErrUnauthorized
+	}
+
+	// Removing an element from a slice
+	targetPost.Comments = append(targetPost.Comments[:commentIdx], targetPost.Comments[commentIdx+1:]...)
+	return targetPost, nil
 }
 
 func (r *MemoryPostRepository) seedData() {

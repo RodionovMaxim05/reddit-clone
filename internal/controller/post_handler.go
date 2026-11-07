@@ -146,3 +146,79 @@ func (h *PostHandler) ListPostsByCategory(w http.ResponseWriter, r *http.Request
 	response := dto.NewPostListResponse(posts)
 	writeJSON(w, http.StatusOK, response)
 }
+
+func (h *PostHandler) CreateComment(w http.ResponseWriter, r *http.Request) {
+	user, ok := UserFromContext(r.Context())
+	if !ok {
+		writeJSON(w, http.StatusUnauthorized, dto.ErrorResponse{Message: "unauthorized"})
+		return
+	}
+
+	postID := r.PathValue("postId")
+
+	var req dto.CreateCommentRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeJSON(w, http.StatusBadRequest, dto.ErrorResponse{Message: "bad request"})
+		return
+	}
+
+	if len(req.Comment) < 1 || len(req.Comment) > 2000 {
+		writeJSON(w, http.StatusUnprocessableEntity, dto.ValidationErrorResponse{
+			Errors: []dto.FieldError{
+				{
+					Location: "body",
+					Param:    "comment",
+					Msg:      "is required and must be at most 2000 characters",
+				},
+			},
+		})
+		return
+	}
+
+	comment := &domain.Comment{
+		Author: *user,
+		Body:   req.Comment,
+	}
+
+	updatedPost, err := h.repo.AddComment(postID, comment)
+	if err != nil {
+		if errors.Is(err, domain.ErrPostNotFound) {
+			writeJSON(w, http.StatusNotFound, dto.ErrorResponse{Message: "post not found"})
+			return
+		}
+		writeJSON(w, http.StatusInternalServerError, dto.ErrorResponse{Message: "internal server error"})
+		return
+	}
+
+	response := dto.NewPostResponse(updatedPost)
+	writeJSON(w, http.StatusCreated, response)
+}
+
+func (h *PostHandler) DeleteComment(w http.ResponseWriter, r *http.Request) {
+	user, ok := UserFromContext(r.Context())
+	if !ok {
+		writeJSON(w, http.StatusUnauthorized, dto.ErrorResponse{Message: "unauthorized"})
+		return
+	}
+
+	postID := r.PathValue("postId")
+	commentID := r.PathValue("commentId")
+
+	updatedPost, err := h.repo.DeleteComment(postID, commentID, user)
+	if err != nil {
+		switch {
+		case errors.Is(err, domain.ErrPostNotFound):
+			writeJSON(w, http.StatusNotFound, dto.ErrorResponse{Message: "post not found"})
+		case errors.Is(err, domain.ErrCommentNotFound):
+			writeJSON(w, http.StatusNotFound, dto.ErrorResponse{Message: "comment not found"})
+		case errors.Is(err, domain.ErrUnauthorized):
+			writeJSON(w, http.StatusUnauthorized, dto.ErrorResponse{Message: "unauthorized"})
+		default:
+			writeJSON(w, http.StatusInternalServerError, dto.ErrorResponse{Message: "internal server error"})
+		}
+		return
+	}
+
+	response := dto.NewPostResponse(updatedPost)
+	writeJSON(w, http.StatusOK, response)
+}
